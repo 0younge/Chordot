@@ -1,21 +1,96 @@
-const CACHE = 'voicing-static-v2';
-const ASSETS = ['./', './index.html', './style.css', './music.js', './app.js', './worker.js', './icon.svg', './manifest.webmanifest'];
+'use strict';
+
+const ROOT = new URL(self.registration.scope);
+// CacheStorage is shared by every path on an origin. Keep deployments isolated.
+// Colons delimit the encoded path (literal colons inside paths are encoded).
+const CACHE_PREFIX = 'voicing-static-scope:' + encodeURIComponent(ROOT.pathname) + ':';
+// Bump the version whenever any cached application file changes.
+const CACHE = CACHE_PREFIX + 'v5';
+const FILES = {
+  'index.html': 'html', 'style.css': 'css', 'music.js': 'javascript',
+  'state.js': 'javascript', 'audio.js': 'javascript', 'app.js': 'javascript',
+  'worker.js': 'javascript', 'icon.svg': 'svg', 'manifest.webmanifest': 'json'
+};
+const URLS = Object.keys(FILES).map(name => new URL(name, ROOT).href);
+const SHELL = new URL('index.html', ROOT).href;
+
+async function validResponse(response, kind) {
+  if (!response || response.status !== 200 || response.redirected || response.type === 'opaque') return false;
+  const type = (response.headers.get('content-type') || '').toLowerCase().split(';')[0].trim();
+  const matches = {
+    html: ['text/html'], css: ['text/css'],
+    javascript: ['text/javascript', 'application/javascript', 'application/x-javascript'],
+    svg: ['image/svg+xml'], json: ['application/manifest+json', 'application/json']
+  };
+  if (!matches[kind].includes(type)) return false;
+  if (kind === 'html') {
+    // An authentication gate may return 200 text/html. Never cache it as the app.
+    const html = await response.clone().text();
+    return /<title>\s*Voicing\b/.test(html) && /id=["']search-form["']/.test(html) && /src=["'](?:\.\/)?music\.js["']/.test(html);
+  }
+  return true;
+}
+
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
+  event.waitUntil((async () => {
+    const responses = await Promise.all(Object.entries(FILES).map(async ([name, kind]) => {
+      const url = new URL(name, ROOT).href;
+      const response = await fetch(new Request(url, { cache: 'reload', redirect: 'error', credentials: 'same-origin' }));
+      if (!await validResponse(response, kind)) throw new Error('Voicing 정적 파일을 확인하지 못했습니다: ' + name);
+      return [url, response];
+    }));
+    const cache = await caches.open(CACHE);
+    try {
+      await Promise.all(responses.map(([url, response]) => cache.put(url, response)));
+    } catch (error) {
+      await caches.delete(CACHE);
+      throw error;
+    }
+    // Keep a new bundle waiting until existing pages close, or the UI explicitly
+    // asks to update and reload. Never silently mix a new worker with old scripts.
+  })());
 });
+
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') event.waitUntil(self.skipWaiting());
+});
+
 self.addEventListener('activate', event => {
-  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('voicing-static-') && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  event.waitUntil((async () => {
+    const names = await caches.keys();
+    const obsolete = names.filter(name => name !== CACHE && (
+      name.startsWith(CACHE_PREFIX) ||
+      (ROOT.pathname === '/' && /^voicing-static-v[12]$/.test(name))
+    ));
+    await Promise.all(obsolete.map(name => caches.delete(name)));
+    await self.clients.claim();
+  })());
 });
+
 self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET' || new URL(event.request.url).origin !== location.origin) return;
-  const url = new URL(event.request.url);
-  // Restrict caching to this app's static files, never authentication or other routes.
-  const names = ['index.html','style.css','music.js','app.js','worker.js','icon.svg','manifest.webmanifest'];
-  if (event.request.mode !== 'navigate' && !names.includes(url.pathname.split('/').pop())) return;
-  event.respondWith(fetch(event.request).catch(async () => {
-    const cached = await caches.match(event.request, { ignoreSearch: true });
+  const request = event.request;
+  if (request.method !== 'GET') return;
+  const url = new URL(request.url);
+  if (url.origin !== ROOT.origin) return;
+  url.search = ''; url.hash = '';
+  const isShell = url.pathname === ROOT.pathname || url.href === SHELL;
+  const key = isShell ? SHELL : url.href;
+  if (!URLS.includes(key)) return;
+  // A request for /login, /other/index.html or any external endpoint is never
+  // intercepted. Query strings on our shell still resolve the same app bundle.
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE);
+    const cached = await cache.match(key);
     if (cached) return cached;
-    if (event.request.mode === 'navigate') return caches.match('./index.html');
-    return Response.error();
-  }));
+    // Storage can be evicted by the browser. A validated network response allows
+    // recovery, but a login page/error is neither stored nor treated as the app.
+    const kind = FILES[new URL(key).pathname.split('/').pop()];
+    try {
+      const response = await fetch(new Request(key, { cache: 'no-cache', redirect: 'error', credentials: 'same-origin' }));
+      if (await validResponse(response, kind)) return response;
+    } catch { /* Offline without a cached copy. */ }
+    return new Response('이 기기에 오프라인 파일이 없어요. 인터넷 연결 후 다시 열어 주세요.', {
+      status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }
+    });
+  })());
 });

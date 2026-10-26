@@ -10,6 +10,8 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="style.css">
   <script src="music.js" defer></script>
+  <script src="state.js" defer></script>
+  <script src="audio.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -19,6 +21,8 @@
     <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15m-6-6 6 6-6 6"/></symbol>
     <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6 4h12v17l-6-4-6 4Z"/></symbol>
     <symbol id="i-play" viewBox="0 0 24 24"><path d="m9 5 11 7-11 7Z"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><path d="M7 7h10v10H7Z"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="m10 13 4-4m-5 7-2 2a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 0 2-2a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0" transform="translate(1 0)"/></symbol>
     <symbol id="i-volume" viewBox="0 0 24 24"><path d="m11 4-6 5H2v6h3l6 5ZM16 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></symbol>
     <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
     <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
@@ -37,6 +41,9 @@
   </header>
 
   <main class="main-shell">
+    <div id="update-notice" class="notice-bar" role="status" hidden><span>새 버전이 준비됐어요. 지금 보고 있는 운지를 이어서 열 수 있어요.</span><button id="apply-update">새 버전 적용</button></div>
+    <p id="offline-status" class="notice-bar" role="status" hidden>오프라인 상태예요. 이 기기에 준비된 코드 검색과 보관함을 사용할 수 있어요.</p>
+    <p id="storage-warning" class="notice-bar warning" role="alert" hidden></p>
     <section class="intro">
       <div><p class="eyebrow"><span></span> A LITTLE CLOSER TO YOUR NEXT CHORD</p>
       <h1>낯선 코드도,<br class="mobile-break"> <span>손끝에 가깝게.</span></h1>
@@ -74,6 +81,7 @@
 
     <section id="saved-view" class="saved-view" hidden>
       <div class="saved-heading"><div><p class="eyebrow">YOUR CHORD COLLECTION</p><h2>다시 치고 싶은 코드.</h2><p>저장한 운지는 이 브라우저에 보관돼요.</p></div><button class="secondary-button" id="back-search">코드 찾기로 <svg class="icon"><use href="#i-arrow"/></svg></button></div>
+      <div class="saved-tools"><div><button id="export-saved" class="secondary-button">내보내기</button><button id="import-saved" class="secondary-button">불러오기</button><input id="import-file" type="file" accept=".json,application/json" aria-label="보관함 백업 파일" hidden></div><p>파일로 백업하거나 다른 기기로 옮길 수 있어요.</p></div>
       <div id="saved-list"></div>
     </section>
 
@@ -87,7 +95,8 @@
     <dl class="help-list"><div><dt>세로선 6개</dt><dd>왼쪽이 굵은 6번 줄, 오른쪽이 얇은 1번 줄이에요.</dd></div><div><dt>●와 숫자</dt><dd>누를 위치와 권장 손가락이에요. 1 검지 · 2 중지 · 3 약지 · 4 새끼.</dd></div><div><dt>주황색 ●</dt><dd>코드의 기준이 되는 근음이에요. 다른 음은 진한 색으로 보여요.</dd></div><div><dt>○ / ×</dt><dd>○는 누르지 않고 치는 개방현, ×는 소리 내지 않는 줄이에요.</dd></div><div><dt>가로로 긴 표시</dt><dd>한 손가락으로 여러 줄을 누르는 바레예요.</dd></div></dl>
     <p class="help-footnote">손가락 번호와 난이도는 계산한 제안이에요. 손 크기와 연주 습관에 따라 더 편한 방법이 있을 수 있어요. 확장음은 옥타브 위치가 달라질 수 있어요.</p>
   </dialog>
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <dialog id="share-dialog" aria-labelledby="share-title"><button id="share-close" class="dialog-close" aria-label="링크 창 닫기"><svg class="icon"><use href="#i-close"/></svg></button><h2 id="share-title">이 운지로 바로 오는 링크</h2><p class="share-description">아래 주소를 복사해 두세요. 선택한 운지와 검색 조건을 함께 열 수 있어요. 사이트의 접근 권한은 그대로 적용돼요.</p><label class="field-label" for="share-link">운지 주소</label><input id="share-link" readonly></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" inert></div>
   <div id="search-status" class="sr-only" role="status" aria-live="polite"></div>
   <noscript><p class="noscript">코드를 계산하려면 브라우저에서 JavaScript를 켜 주세요.</p></noscript>
 </body>
