@@ -5,7 +5,7 @@ const ROOT = new URL(self.registration.scope);
 // Colons delimit the encoded path (literal colons inside paths are encoded).
 const CACHE_PREFIX = 'voicing-static-scope:' + encodeURIComponent(ROOT.pathname) + ':';
 // Bump the version whenever any cached application file changes.
-const CACHE = CACHE_PREFIX + 'v5';
+const CACHE = CACHE_PREFIX + 'v6';
 const FILES = {
   'index.html': 'html', 'style.css': 'css', 'music.js': 'javascript',
   'state.js': 'javascript', 'audio.js': 'javascript', 'app.js': 'javascript',
@@ -31,21 +31,47 @@ async function validResponse(response, kind) {
   return true;
 }
 
+async function fetchBundle(allowPartial = false) {
+  const fetched = await Promise.allSettled(Object.entries(FILES).map(async ([name, kind]) => {
+    const url = new URL(name, ROOT).href;
+    const response = await fetch(new Request(url, { cache: 'reload', redirect: 'error', credentials: 'same-origin' }));
+    if (!await validResponse(response, kind)) throw new Error('Voicing 정적 파일을 확인하지 못했습니다: ' + name);
+    return [url, response];
+  }));
+  const failed = fetched.find(result => result.status === 'rejected');
+  if (failed && !allowPartial) throw failed.reason;
+  return fetched.filter(result => result.status === 'fulfilled').map(result => result.value);
+}
+
+async function storeBundle(responses) {
+  const cache = await caches.open(CACHE);
+  // Finish every write before deleting a failed bundle, so a late write cannot
+  // leave a partial cache behind. Keep response bodies for online fallback.
+  const writes = await Promise.allSettled(responses.map(([url, response]) => cache.put(url, response.clone())));
+  const failed = writes.find(result => result.status === 'rejected');
+  if (failed) {
+    try { await caches.delete(CACHE); } catch { /* Storage may be unavailable. */ }
+    throw failed.reason;
+  }
+}
+
+let recovery = null;
+function recoverBundle() {
+  // A registration survives cache eviction. Rebuild all validated files on the
+  // next online visit without requiring a new service-worker version to install.
+  if (!recovery) recovery = (async () => {
+    const responses = await fetchBundle(true);
+    if (responses.length === URLS.length) {
+      try { await storeBundle(responses); } catch { /* Online use still works when storage is full or unavailable. */ }
+    }
+    return new Map(responses);
+  })().finally(() => { recovery = null; });
+  return recovery;
+}
+
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
-    const responses = await Promise.all(Object.entries(FILES).map(async ([name, kind]) => {
-      const url = new URL(name, ROOT).href;
-      const response = await fetch(new Request(url, { cache: 'reload', redirect: 'error', credentials: 'same-origin' }));
-      if (!await validResponse(response, kind)) throw new Error('Voicing 정적 파일을 확인하지 못했습니다: ' + name);
-      return [url, response];
-    }));
-    const cache = await caches.open(CACHE);
-    try {
-      await Promise.all(responses.map(([url, response]) => cache.put(url, response)));
-    } catch (error) {
-      await caches.delete(CACHE);
-      throw error;
-    }
+    await storeBundle(await fetchBundle());
     // Keep a new bundle waiting until existing pages close, or the UI explicitly
     // asks to update and reload. Never silently mix a new worker with old scripts.
   })());
@@ -79,15 +105,15 @@ self.addEventListener('fetch', event => {
   // A request for /login, /other/index.html or any external endpoint is never
   // intercepted. Query strings on our shell still resolve the same app bundle.
   event.respondWith((async () => {
-    const cache = await caches.open(CACHE);
-    const cached = await cache.match(key);
-    if (cached) return cached;
-    // Storage can be evicted by the browser. A validated network response allows
-    // recovery, but a login page/error is neither stored nor treated as the app.
-    const kind = FILES[new URL(key).pathname.split('/').pop()];
     try {
-      const response = await fetch(new Request(key, { cache: 'no-cache', redirect: 'error', credentials: 'same-origin' }));
-      if (await validResponse(response, kind)) return response;
+      const cache = await caches.open(CACHE);
+      const cached = await cache.match(key);
+      if (cached) return cached;
+    } catch { /* Try the network when cache access is unavailable. */ }
+    try {
+      const responses = await recoverBundle();
+      const response = responses.get(key);
+      if (response) return response.clone();
     } catch { /* Offline without a cached copy. */ }
     return new Response('이 기기에 오프라인 파일이 없어요. 인터넷 연결 후 다시 열어 주세요.', {
       status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }

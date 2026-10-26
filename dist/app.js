@@ -96,6 +96,14 @@
 
   function savedKey(name, frets) { return name + '|' + frets.join(','); }
   function isSaved(v) { return saved.some(s => savedKey(s.chord, s.frets) === savedKey(chord.canonical, v.frets)); }
+  function syncSaveButton() {
+    const v = result?.voicings[activeIndex], button = $('#save-voicing');
+    if (!chord || !v || !button) return;
+    const yes = isSaved(v);
+    button.setAttribute('aria-pressed', String(yes));
+    button.classList.toggle('saved', yes);
+    button.innerHTML = icon('bookmark') + (yes ? ' 저장됨' : ' 운지 저장');
+  }
   function position(v) { return v.maxFret === 0 ? '개방현' : v.minFret === v.maxFret ? `${v.minFret}프렛` : `${v.minFret}–${v.maxFret}프렛`; }
   function titleHTML(parsed) {
     return `<div class="result-header"><div><p class="result-eyebrow">YOUR NEXT CHORD</p><h2 class="chord-title">${escapeHTML(parsed.name)}</h2><p class="chord-description">${escapeHTML(parsed.description)}${parsed.bass ? ' · 베이스 ' + escapeHTML(noteName(parsed.bassPC, parsed)) : ''}</p></div>${result ? `<span class="result-total">${result.voicings.length ? '최대 ' + result.voicings.length + '개 추천' : '조건에 맞는 결과 없음'}</span>` : ''}</div>`;
@@ -259,6 +267,7 @@
         const next = state.readStored(JSON.stringify(transform(saved)));
         localStorage.setItem(STORAGE, JSON.stringify(next)); saved = next;
         $('#saved-count').textContent = String(saved.length);
+        syncSaveButton();
         return true;
       } catch (error) { toast(error.name === 'QuotaExceededError' ? '저장 공간이 부족해요. 보관함을 내보낸 뒤 공간을 확인해 주세요.' : error.message || '보관함을 저장하지 못했어요.'); return false; }
     };
@@ -377,13 +386,10 @@
     } catch (error) { toast(error.message || '보관함 파일을 읽지 못했어요.'); }
   });
   window.addEventListener('storage', event => {
-    if (event.key !== STORAGE) return;
+    if (event.key !== STORAGE && event.key !== null) return;
     readSaved();
     if (currentView === 'saved') renderSaved();
-    else if (chord && result?.voicings[activeIndex]) {
-      const button = $('#save-voicing');
-      if (button) { const yes = isSaved(result.voicings[activeIndex]); button.setAttribute('aria-pressed', String(yes)); button.classList.toggle('saved', yes); button.innerHTML = icon('bookmark') + (yes ? ' 저장됨' : ' 운지 저장'); }
-    }
+    syncSaveButton();
   });
 
   const narrowScreen = matchMedia('(max-width: 760px)');

@@ -10,10 +10,14 @@ function setup(transform = response => response, options = {}) {
   const root = options.root || 'https://voicing.test/guitar/';
   const caches = {
     async open(name) {
+      if (options.cacheUnavailable) throw new Error('CacheStorage unavailable');
       if (!stores.has(name)) stores.set(name, new Map());
       const entries = stores.get(name);
       return {
-        async put(key, response) { entries.set(String(key), response.clone()); },
+        async put(key, response) {
+          if (options.failWrites && String(key).endsWith('/app.js')) throw new Error('Storage full');
+          entries.set(String(key), response.clone());
+        },
         async match(key) { return entries.get(String(key))?.clone(); }
       };
     },
@@ -92,6 +96,71 @@ test('evicted cache plus unavailable network returns an explicit non-cacheable f
   const response = await app.dispatch('fetch', { request: { method: 'GET', mode: 'navigate', url: app.root } });
   assert.equal(response.status, 503); assert.equal(response.headers.get('cache-control'), 'no-store');
   assert.match(await response.text(), /인터넷 연결/);
+});
+
+test('an online visit rebuilds an evicted bundle for the next offline visit', async () => {
+  const app = setup(); await app.dispatch('install');
+  app.stores.clear();
+  const response = await app.dispatch('fetch', { request: { method: 'GET', url: app.root } });
+  assert.equal(response.status, 200);
+  assert.equal([...app.stores.values()][0].size, 9, 'the whole bundle is restored without reinstalling the worker');
+  app.setOffline(true);
+  const shell = await app.dispatch('fetch', { request: { method: 'GET', url: app.root + '?chord=G7' } });
+  const asset = await app.dispatch('fetch', { request: { method: 'GET', url: app.root + 'music.js' } });
+  assert.equal(shell.status, 200);
+  assert.equal(await asset.text(), 'asset:music.js');
+});
+
+test('concurrent missing assets share one complete bundle recovery', async () => {
+  const app = setup(); await app.dispatch('install');
+  const entries = [...app.stores.values()][0];
+  entries.delete(app.root + 'music.js'); entries.delete(app.root + 'audio.js');
+  const calls = app.calls.length;
+  const responses = await Promise.all(['music.js', 'audio.js', 'music.js'].map(name =>
+    app.dispatch('fetch', { request: { method: 'GET', url: app.root + name } })
+  ));
+  assert.deepEqual(await Promise.all(responses.map(response => response.text())), ['asset:music.js', 'asset:audio.js', 'asset:music.js']);
+  assert.equal(app.calls.length - calls, 9, 'one recovery fetches each bundle file once');
+  assert.equal(entries.size, 9);
+});
+
+test('recovery rejects invalid files without caching a partial bundle', async () => {
+  for (const kind of ['login', 'wrong-mime', 'missing']) {
+    const app = setup((response, name) => {
+      if (kind === 'login' && name === 'index.html') return new Response('<title>Sign in</title>', { headers: { 'content-type': 'text/html' } });
+      if (kind === 'wrong-mime' && name === 'music.js') return new Response('<title>Sign in</title>', { headers: { 'content-type': 'text/html' } });
+      if (kind === 'missing' && name === 'audio.js') return new Response('not found', {status: 404});
+      return response;
+    });
+    const file = kind === 'login' ? '' : kind === 'wrong-mime' ? 'music.js' : 'audio.js';
+    const response = await app.dispatch('fetch', { request: { method: 'GET', url: app.root + file } });
+    assert.equal(response.status, 503, kind);
+    assert.ok([...app.stores.values()].every(entries => entries.size === 0), kind);
+  }
+});
+
+test('a failed unrelated file cannot block a valid online response or create an incomplete offline bundle', async () => {
+  const app = setup((response, name) => name === 'icon.svg' ? new Response('temporary failure', {status: 503}) : response);
+  const response = await app.dispatch('fetch', { request: { method: 'GET', url: app.root } });
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /search-form/);
+  assert.ok([...app.stores.values()].every(entries => entries.size === 0));
+  app.setOffline(true);
+  const offline = await app.dispatch('fetch', { request: { method: 'GET', url: app.root } });
+  assert.equal(offline.status, 503);
+});
+
+test('cache failures preserve online use and never leave a partially written bundle', async () => {
+  for (const options of [{failWrites: true}, {cacheUnavailable: true}]) {
+    const app = setup(undefined, options);
+    const response = await app.dispatch('fetch', { request: { method: 'GET', url: app.root } });
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /search-form/);
+    assert.equal(app.stores.size, 0);
+    app.setOffline(true);
+    const offline = await app.dispatch('fetch', { request: { method: 'GET', url: app.root } });
+    assert.equal(offline.status, 503);
+  }
 });
 
 test('activation clears only obsolete app caches and claims clients; explicit update can skip waiting', async () => {

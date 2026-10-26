@@ -130,8 +130,13 @@
     if (quality.startsWith('sus')) canonicalQuality = '';
     if (quality === 'maj' && ![7,9,11,13].includes(ext)) canonicalQuality = '';
     if (quality === 'm' && majorSeventh) canonicalQuality = 'mmaj';
-    const canonical = root + canonicalQuality + (extension === '69' ? '6/9' : extension) +
-      (suspension ? 'sus' + suspension : '') + [...new Set(canonicalModifiers)].join('') + (bass ? '/' + bass : '');
+    const canonicalSuffix = canonicalQuality + (extension === '69' ? '6/9' : extension) +
+      (suspension ? 'sus' + suspension : '');
+    // A leading alteration needs a boundary from the root: C(b5) is not Cb5.
+    // Keep modifier order and repetitions: add9,b9,add9 restores the natural 9.
+    const modifiers = canonicalModifiers.join('');
+    const canonical = root + canonicalSuffix + (!canonicalSuffix && /^[#b]/.test(modifiers) ? `(${modifiers})` : modifiers) + (bass ? '/' + bass : '');
+    if (canonical.length > 60) throw new Error('코드 표기를 정리한 이름이 60자를 넘어요. 반복되는 표기를 줄여 주세요.');
     return { input, root, rootPC, bass, bassPC: bass ? notePC(bass) : null, canonical,
       name: pretty(canonical), description, intervals };
   }

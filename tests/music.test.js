@@ -101,6 +101,60 @@ test('suspensions retain explicitly added notes and conflicting input is rejecte
   }
 });
 
+test('canonical alterations remain separate from natural and accidental roots', () => {
+  for (const root of ['C', 'Bb', 'C#', 'Cbb', 'F##']) {
+    for (const suffix of ['(b5)', '(#5)', '(#9)', '(#11)', 'majb5', 'maj#5']) {
+      const symbol = root + suffix;
+      const original = parseChord(symbol);
+      const restored = parseChord(original.canonical);
+      assert.equal(restored.root, original.root, symbol);
+      assert.deepEqual(restored.intervals, original.intervals, symbol);
+      assert.equal(restored.canonical, original.canonical, symbol);
+    }
+  }
+  assert.equal(parseChord('C(b5)').canonical, 'C(b5)');
+  assert.equal(parseChord('Bb(b5)').canonical, 'Bb(b5)');
+  assert.equal(parseChord('C#(#11)').canonical, 'C#(#11)');
+  assert.deepEqual(pitches('C(#5)'), [0,4,8]);
+  assert.deepEqual(pitches('C#5'), [1,8], 'a sharp-root power chord stays distinct');
+  for (const symbol of ['C(b5)', 'C(#5)', 'Bb(b5)', 'C(#11)', 'C(#5)/E']) {
+    const original = parseChord(symbol);
+    const selected = findVoicings(original).voicings[0];
+    assert.ok(selected, symbol);
+    const restored = inspectVoicing(original.canonical, selected.frets);
+    assert.equal(restored.valid, true, `${symbol}: ${restored.reason}`);
+    assert.deepEqual(restored.voicing.frets, selected.frets, symbol);
+    assert.deepEqual(parseChord(original.canonical).bassPC, original.bassPC, symbol);
+  }
+});
+
+test('canonical modifiers preserve repeated additions after alterations', () => {
+  for (const symbol of ['C(add9,b9,add9)', 'C9(add9,b9,add9)', 'C11(add11,#11,add11)', 'C(add9,#9,add9,b9,add9)']) {
+    const original = parseChord(symbol);
+    const restored = parseChord(original.canonical);
+    assert.deepEqual(restored.intervals, original.intervals, symbol);
+    assert.equal(restored.canonical, original.canonical, symbol);
+  }
+  const original = parseChord('C(add9,b9,add9)');
+  assert.deepEqual(original.intervals.filter(i => i.degree === 9).map(i => i.pc), [1,2]);
+  const selected = findVoicings(original).voicings[0];
+  assert.ok(selected);
+  const restored = inspectVoicing(original.canonical, selected.frets);
+  assert.equal(restored.valid, true, restored.reason);
+  assert.deepEqual(restored.voicing.frets, selected.frets);
+});
+
+test('normalization never returns a chord name too long to reopen', () => {
+  for (const quality of ['o', '°']) {
+    const symbol = 'C' + quality + 'no5'.repeat(19);
+    assert.ok(symbol.length <= 60);
+    assert.throws(() => parseChord(symbol), /정리한 이름이 60자를 넘어요/);
+  }
+  const boundary = parseChord('Cdim' + 'no5'.repeat(18) + '/C');
+  assert.equal(boundary.canonical.length, 60);
+  assert.deepEqual(parseChord(boundary.canonical).intervals, boundary.intervals);
+});
+
 test('six-nine descriptions and required ninth remain distinct from dominant extensions', () => {
   assert.equal(parseChord('C6/9').description, '메이저 6/9');
   assert.equal(parseChord('Cm6/9').description, '마이너 6/9');
