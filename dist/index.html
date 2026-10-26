@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f5f0">
+  <meta name="description" content="낯선 코드도 손끝에 가깝게. 기타 코드의 구성음과 여러 운지를 찾고, 소리를 듣고, 마음에 드는 운지를 저장하세요.">
+  <title>Voicing — 손끝에 맞는 기타 코드</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="style.css">
+  <script src="music.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#search-input">코드 검색으로 건너뛰기</a>
+  <svg class="svg-defs" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.7" cy="10.7" r="6.7"/><path d="m16 16 4.5 4.5"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6 4h12v17l-6-4-6 4Z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m9 5 11 7-11 7Z"/></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="m11 4-6 5H2v6h3l6 5ZM16 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-11v1"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16M8 4v6m8 4v6"/></symbol>
+  </defs></svg>
+
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="Voicing 홈"><span class="brand-mark"><i></i><i></i><i></i><i></i></span>voicing<span class="brand-dot">.</span></a>
+    <nav class="main-nav" aria-label="주 메뉴">
+      <button class="nav-item active" id="search-tab" type="button" aria-current="page">코드 찾기</button>
+      <button class="nav-item" id="saved-tab" type="button">보관함 <span class="count" id="saved-count">0</span></button>
+    </nav>
+    <button class="help-button" id="help-open" type="button">운지표 읽는 법 <svg class="icon"><use href="#i-info"/></svg></button>
+  </header>
+
+  <main class="main-shell">
+    <section class="intro">
+      <div><p class="eyebrow"><span></span> A LITTLE CLOSER TO YOUR NEXT CHORD</p>
+      <h1>낯선 코드도,<br class="mobile-break"> <span>손끝에 가깝게.</span></h1>
+      <p class="intro-copy">악보에서 만난 코드, 내 기타에서 편한 모양으로 찾아보세요.</p></div>
+      <div class="tuning-stamp"><span>STANDARD TUNING</span><div><b>E</b><b>A</b><b>D</b><b>G</b><b>B</b><b>E</b></div><small>6번 줄 <span>→</span> 1번 줄</small></div>
+    </section>
+
+    <div id="finder-view" class="workspace">
+      <aside class="search-panel" aria-label="코드 검색과 조건">
+        <div class="panel-heading"><span class="section-number">01</span><h2>어떤 코드를 찾나요?</h2></div>
+        <form id="search-form" novalidate>
+          <label class="field-label" for="search-input">코드 이름</label>
+          <div class="search-field"><input id="search-input" name="chord" type="text" value="Cmaj9" placeholder="예: Cmaj9, D/F#" maxlength="60" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="input-hint search-error"><button type="submit" aria-label="코드 찾기"><svg class="icon"><use href="#i-arrow"/></svg></button></div>
+          <p id="search-error" class="error-message" role="alert" hidden></p>
+          <p id="input-hint" class="input-hint">♯는 #, ♭는 b로 입력해도 좋아요.</p>
+        </form>
+        <div class="try-section"><span class="field-label">이런 코드도 찾아보세요</span><div class="example-chips"><button data-chord="Cmaj9">Cmaj9</button><button data-chord="F#m7b5">F♯m7♭5</button><button data-chord="G7(b9)">G7(♭9)</button><button data-chord="D/F#">D/F♯</button></div></div>
+
+        <div class="filter-title"><button id="filters-toggle" class="filter-heading-button" type="button" aria-expanded="true" aria-controls="filter-controls"><svg class="icon"><use href="#i-sliders"/></svg><span>내 손에 맞게</span><svg class="icon filter-chevron"><use href="#i-chevron"/></svg></button><button id="reset-filters" type="button">초기화</button></div>
+        <div id="filter-controls">
+        <label class="switch-row"><span>바레 없는 운지<small>한 손가락으로 여러 줄 누르기 제외</small></span><input id="no-barre" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label>
+        <label class="switch-row"><span>구성음 모두 포함<small>음을 생략한 운지는 제외</small></span><input id="complete" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label>
+        <div class="select-row"><label for="max-fret">찾아볼 위치</label><select id="max-fret"><option value="5">5프렛까지</option><option value="9">9프렛까지</option><option value="12" selected>12프렛까지</option><option value="15">15프렛까지</option></select></div>
+        <div class="select-row"><label for="span">손가락 벌림</label><select id="span"><option value="2">3프렛 이내</option><option value="3" selected>4프렛 이내</option><option value="4">5프렛 이내</option></select></div>
+        <p class="filter-note">개방현은 손가락 벌림에 포함하지 않아요.</p>
+        <details class="supported"><summary>어떤 코드를 지원하나요?<svg class="icon"><use href="#i-chevron"/></svg></summary><p>메이저·마이너, 5·6·7·9·11·13, maj, dim, aug, sus2·sus4, add9·add11·add13, ♭5·♯5·♭9·♯9·♯11·♭13, 슬래시 코드를 지원해요.</p><p>예: Bø, Cm(maj7), C6/9, C7(no5). alt처럼 해석이 여러 가지인 표기는 구체적인 음으로 입력해 주세요.</p></details>
+        </div>
+        <div class="sidebar-note"><span class="little-star">✳</span><p>정답 모양은 하나가 아니에요.<br>가장 편하게 울리는 운지를 찾아보세요.</p></div>
+      </aside>
+
+      <section class="results" id="results" aria-label="코드 검색 결과" aria-busy="false">
+        <div id="result-content"></div>
+      </section>
+    </div>
+
+    <section id="saved-view" class="saved-view" hidden>
+      <div class="saved-heading"><div><p class="eyebrow">YOUR CHORD COLLECTION</p><h2>다시 치고 싶은 코드.</h2><p>저장한 운지는 이 브라우저에 보관돼요.</p></div><button class="secondary-button" id="back-search">코드 찾기로 <svg class="icon"><use href="#i-arrow"/></svg></button></div>
+      <div id="saved-list"></div>
+    </section>
+
+    <footer class="site-footer"><span><span class="footer-dot"></span> 나만의 작은 코드 사전</span><p>여섯 줄 위에서, 더 많은 가능성.</p><span class="footer-brand">MADE FOR THE WAY YOU PLAY</span></footer>
+  </main>
+
+  <dialog id="help-dialog" aria-labelledby="help-title">
+    <button class="dialog-close" id="help-close" aria-label="닫기"><svg class="icon"><use href="#i-close"/></svg></button>
+    <p class="eyebrow">A QUICK GUIDE</p><h2 id="help-title">운지표, 이렇게 읽어요.</h2>
+    <div id="help-diagram"></div>
+    <dl class="help-list"><div><dt>세로선 6개</dt><dd>왼쪽이 굵은 6번 줄, 오른쪽이 얇은 1번 줄이에요.</dd></div><div><dt>●와 숫자</dt><dd>누를 위치와 권장 손가락이에요. 1 검지 · 2 중지 · 3 약지 · 4 새끼.</dd></div><div><dt>주황색 ●</dt><dd>코드의 기준이 되는 근음이에요. 다른 음은 진한 색으로 보여요.</dd></div><div><dt>○ / ×</dt><dd>○는 누르지 않고 치는 개방현, ×는 소리 내지 않는 줄이에요.</dd></div><div><dt>가로로 긴 표시</dt><dd>한 손가락으로 여러 줄을 누르는 바레예요.</dd></div></dl>
+    <p class="help-footnote">손가락 번호와 난이도는 계산한 제안이에요. 손 크기와 연주 습관에 따라 더 편한 방법이 있을 수 있어요. 확장음은 옥타브 위치가 달라질 수 있어요.</p>
+  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="search-status" class="sr-only" role="status" aria-live="polite"></div>
+  <noscript><p class="noscript">코드를 계산하려면 브라우저에서 JavaScript를 켜 주세요.</p></noscript>
+</body>
+</html>
