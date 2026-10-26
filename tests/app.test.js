@@ -12,8 +12,10 @@ const flush = async () => { for (let i = 0; i < 6; i++) await Promise.resolve();
 
 // A small DOM/event fixture for app wiring, not a layout or browser substitute.
 // Execute the shipped script and drive the same buttons used in the UI.
-async function appFixture(records = [grip]) {
+async function appFixture(records = [grip], config = {}) {
   const nodes = new Map(), windowEvents = new Map(), storage = new Map();
+  const calculations = [];
+  let holdCalculations = false;
   storage.set(STORAGE, JSON.stringify(records));
   let activeElement = null;
   class Element {
@@ -65,7 +67,8 @@ async function appFixture(records = [grip]) {
     createElement: () => new Element(), addEventListener() {},
     get activeElement() { return activeElement; }
   };
-  const location = { href: 'https://voicing.test/', protocol: 'https:' };
+  const location = { href: config.href || 'https://voicing.test/', protocol: 'https:' };
+  const entries = [location.href]; let historyIndex = 0;
   const window = {
     VoicingMusic: music, VoicingState: state,
     VoicingAudio: { createPlayer: () => ({ stop() {} }) },
@@ -73,16 +76,32 @@ async function appFixture(records = [grip]) {
   };
   const context = vm.createContext({
     window, document, location, navigator: { onLine: true },
-    history: { pushState(_state, _title, href) { location.href = href; }, replaceState(_state, _title, href) { location.href = href; } },
+    history: {
+      pushState(_state, _title, href) { entries.splice(++historyIndex); entries.push(href); location.href = href; },
+      replaceState(_state, _title, href) { entries[historyIndex] = href; location.href = href; }
+    },
     localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
     matchMedia: () => ({ matches: false, addEventListener() {} }),
     setTimeout: () => 1, clearTimeout() {}, URL, Blob,
-    Worker: class { constructor() { throw new Error('Use the supported main-thread fallback.'); } }
+    Worker: class {
+      constructor() { if (!config.worker) throw new Error('Use the supported main-thread fallback.'); }
+      postMessage(request) {
+        const respond = () => this.onmessage({ data: { id: request.id, result: music.findVoicings(request.chord, request.options) } });
+        if (holdCalculations) calculations.push(respond); else queueMicrotask(respond);
+      }
+      terminate() {}
+    }
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../dist/app.js'), 'utf8'), context);
   await flush();
   return {
     node: selector => nodes.get(selector),
+    href: () => location.href,
+    async search(value) { nodes.get('#search-input').value = value; nodes.get('#search-form').events.get('submit')({ preventDefault() {} }); await flush(); },
+    async back() { location.href = entries[--historyIndex]; windowEvents.get('popstate')(); await flush(); },
+    async forward() { location.href = entries[++historyIndex]; windowEvents.get('popstate')(); await flush(); },
+    holdSearches() { holdCalculations = true; },
+    async finishSearch() { calculations.shift()(); await flush(); },
     records: () => JSON.parse(storage.get(STORAGE) || '[]'),
     async clearFromAnotherTab() { storage.clear(); windowEvents.get('storage')({ key: null }); await flush(); }
   };
@@ -121,4 +140,88 @@ test('clearing storage in another tab refreshes an open library', async () => {
   await app.clearFromAnotherTab();
   assert.equal(app.node('#saved-list').querySelectorAll('[data-delete]').length, 0);
   assert.match(app.node('#saved-list').innerHTML, /마음에 드는 운지를 모아 보세요/);
+});
+
+test('invalid and empty searches retain their input and error after reload', async () => {
+  for (const input of ['H7', '']) {
+    const app = await appFixture();
+    await app.search(input);
+    const url = new URL(app.href());
+    assert.equal(url.searchParams.get('chord'), input);
+    assert.equal(url.searchParams.has('shape'), false);
+    const reloaded = await appFixture([], { href: app.href() });
+    assert.equal(reloaded.node('#search-input').value, input);
+    assert.equal(reloaded.node('#search-input').getAttribute('aria-invalid'), 'true');
+    assert.equal(reloaded.node('#save-voicing'), undefined);
+  }
+});
+
+test('a rejected saved shape keeps its exact chord and frets in the address', async () => {
+  const incompatible = { ...grip, chord: 'C' };
+  const app = await appFixture([incompatible]);
+  await app.node('#saved-tab').click();
+  await app.node('#saved-list').querySelector('[data-open-saved]').click();
+  const url = new URL(app.href());
+  assert.equal(url.searchParams.get('chord'), 'C');
+  assert.equal(url.searchParams.get('shape'), incompatible.frets.join(','));
+  assert.equal(url.searchParams.has('view'), false);
+  const reloaded = await appFixture([], { href: app.href() });
+  assert.equal(reloaded.node('#search-input').value, 'C');
+  assert.match(reloaded.node('#result-content').innerHTML, /저장된 프렛: × · 3 · 2 · 4 · 3 · 0/);
+});
+
+test('history restores an error search across library navigation and a successful retry', async () => {
+  const app = await appFixture();
+  await app.search('H7');
+  await app.node('#saved-tab').click();
+  assert.equal(new URL(app.href()).searchParams.get('view'), 'saved');
+  await app.back();
+  assert.equal(app.node('#finder-view').hidden, false);
+  assert.equal(app.node('#search-input').value, 'H7');
+  await app.forward();
+  assert.equal(app.node('#saved-view').hidden, false);
+  await app.back();
+  await app.node('#retry-search').click();
+  assert.equal(app.node('#search-input').value, 'Cmaj9');
+  await app.back();
+  assert.equal(app.node('#search-input').value, 'H7');
+  assert.equal(app.node('#search-input').getAttribute('aria-invalid'), 'true');
+});
+
+test('switching views while a search is pending never restores the previous result', async () => {
+  const app = await appFixture([], { worker: true });
+  app.holdSearches();
+  await app.search('Dm');
+  assert.equal(new URL(app.href()).searchParams.get('chord'), 'Dm');
+  await app.node('#saved-tab').click();
+  await app.node('#search-tab').click();
+  assert.equal(app.node('#search-input').value, 'Dm');
+  assert.match(app.node('#result-content').innerHTML, /운지를 찾고 있어요/);
+  assert.equal(app.node('#save-voicing'), undefined);
+  await app.finishSearch();
+  assert.match(app.node('#result-content').innerHTML, /Dm 선택한 운지/);
+  assert.equal(new URL(app.href()).searchParams.get('chord'), 'Dm');
+});
+
+test('repeating a search or its alias does not add duplicate history entries', async () => {
+  const app = await appFixture();
+  await app.search('Dm');
+  await app.search('CM7');
+  await app.search('CM7');
+  await app.search('Cmaj7');
+  await app.back();
+  assert.equal(app.node('#search-input').value, 'Dm');
+  assert.match(app.node('#result-content').innerHTML, /Dm 선택한 운지/);
+});
+
+test('library navigation preserves malformed shape links until a new search', async () => {
+  const app = await appFixture([], { href: 'https://voicing.test/?chord=C&shape=bad' });
+  await app.node('#saved-tab').click();
+  assert.equal(new URL(app.href()).searchParams.get('shape'), 'bad');
+  await app.node('#search-tab').click();
+  assert.match(app.node('#result-content').innerHTML, /주소에 들어 있는 운지 정보가 올바르지 않아요/);
+  const reloaded = await appFixture([], { href: app.href() });
+  assert.match(reloaded.node('#result-content').innerHTML, /주소에 들어 있는 운지 정보가 올바르지 않아요/);
+  await app.node('#retry-search').click();
+  assert.match(app.node('#result-content').innerHTML, /C 선택한 운지/);
 });

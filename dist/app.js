@@ -203,11 +203,22 @@
     if (pending) { clearTimeout(pending.timer); pending.resolve(null); pending = null; }
   }
 
-  function updateLocation(mode = 'replace') {
-    if (mode === 'none' || location.protocol === 'file:' || !chord || !result) return;
-    const href = state.locationFor(location.href, { chord: chord.canonical, options: currentOptions, frets: result.voicings[activeIndex]?.frets, view: currentView });
+  function writeLocation(href, mode) {
+    if (mode === 'none' || location.protocol === 'file:') return;
     if (href === location.href) return;
     try { history[mode === 'push' ? 'pushState' : 'replaceState'](null, '', href); } catch { /* File and restricted frames can still search. */ }
+  }
+
+  function updateLocation(mode = 'replace') {
+    if (chord && result) {
+      writeLocation(state.locationFor(location.href, { chord: chord.canonical, options: currentOptions, frets: result.voicings[activeIndex]?.frets, view: currentView }), mode);
+    } else {
+      // Errors and in-flight searches still have a navigable address. Preserve
+      // their input, including malformed shape data, when only the view changes.
+      const url = new URL(location.href);
+      if (currentView === 'saved') url.searchParams.set('view', 'saved'); else url.searchParams.delete('view');
+      writeLocation(url.href, mode);
+    }
   }
 
   function showError(message, parsed = null, targetFrets = null) {
@@ -225,17 +236,25 @@
     $('#search-error').hidden = true;
     $('#search-input').removeAttribute('aria-invalid');
     stopSound();
-    let parsed;
-    try { parsed = music.parseChord(value); }
-    catch (error) {
-      $('#search-error').textContent = error.message;
+    const settings = options();
+    chord = null; result = null; currentOptions = settings;
+    let parsed, parseError;
+    try { parsed = music.parseChord(value); } catch (error) { parseError = error; }
+    // Record the request before calculation so failed searches and a
+    // refresh during calculation never reopen an unrelated successful result.
+    const requestedHref = state.locationFor(location.href, { chord: parsed?.canonical || value, options: settings, frets: targetFrets, view: currentView });
+    const previous = state.parseLocation(location.href);
+    if (!targetFrets) previous.frets = null;
+    const sameSearch = !previous.invalidShape && state.locationFor(location.href, previous) === requestedHref;
+    writeLocation(requestedHref, historyMode === 'push' && sameSearch ? 'replace' : historyMode);
+    if (parseError) {
+      $('#search-error').textContent = parseError.message;
       $('#search-error').hidden = false;
       $('#search-input').setAttribute('aria-invalid', 'true');
       $('#results').setAttribute('aria-busy', 'false');
-      showError(error.message);
+      showError(parseError.message);
       return;
     }
-    const settings = options();
     $('#results').setAttribute('aria-busy', 'true');
     $('#result-content').innerHTML = '<div class="loading-state"><div class="spinner"></div>손끝에 맞는 운지를 찾고 있어요.</div>';
     try {
@@ -252,7 +271,7 @@
       visibleCount = Math.max(3, Math.ceil((activeIndex + 1) / 3) * 3);
       renderResults();
       $('#search-status').textContent = result.voicings.length ? `${chord.name}, ${result.voicings.length}개 운지를 추천해요.` : `${chord.name}, 조건에 맞는 운지가 없어요.`;
-      updateLocation(historyMode);
+      updateLocation(historyMode === 'none' ? 'none' : 'replace');
     } catch {
       if (id !== requestId) return;
       showError('운지를 계산하지 못했어요. 코드를 다시 검색해 주세요.', parsed);

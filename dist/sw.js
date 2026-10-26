@@ -5,7 +5,7 @@ const ROOT = new URL(self.registration.scope);
 // Colons delimit the encoded path (literal colons inside paths are encoded).
 const CACHE_PREFIX = 'voicing-static-scope:' + encodeURIComponent(ROOT.pathname) + ':';
 // Bump the version whenever any cached application file changes.
-const CACHE = CACHE_PREFIX + 'v6';
+const CACHE = CACHE_PREFIX + 'v7';
 const FILES = {
   'index.html': 'html', 'style.css': 'css', 'music.js': 'javascript',
   'state.js': 'javascript', 'audio.js': 'javascript', 'app.js': 'javascript',
