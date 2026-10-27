@@ -8,6 +8,7 @@
   const icon = name => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"/></svg>`;
   let chord = null, result = null, activeIndex = 0, visibleCount = 3, requestId = 0, worker = null;
   let saved = [], toastTimeout, currentOptions = {}, currentView = 'search', storageReadable = true;
+  const savedControlTargets = new WeakMap();
   let playing = false, arpeggioPlaying = false, storageError = '', rawSaved = null;
   const sound = window.VoicingAudio.createPlayer({ onStateChange(value) { playing = value; syncPlayback(); } });
   function readSaved() {
@@ -30,7 +31,7 @@
     const text = document.createElement('span'); text.textContent = message; $('#toast').append(text);
     if (undo) {
       const button = document.createElement('button'); button.textContent = '되돌리기';
-      button.addEventListener('click', () => { undo(); hideToast(); });
+      button.addEventListener('click', () => { hideToast(); undo(); });
       $('#toast').append(button);
     }
     $('#toast').classList.add('visible');
@@ -68,33 +69,33 @@
     const height = bottom + 76;
     const y = f => top + (f - base + 0.5) * rowHeight;
     let svg = `<svg class="chord-diagram${mini ? ' mini-diagram' : ''}" viewBox="0 0 250 ${height}" role="img" aria-label="${escapeHTML(parsed.name)} 운지, 6번 줄부터 ${voicing.frets.map(f => f < 0 ? '뮤트' : f === 0 ? '개방' : f + '프렛').join(', ')}">`;
-    svg += `<text x="19" y="${top + 24}" font-size="11" fill="#929987" text-anchor="middle">${base}</text>`;
-    for (let f = 0; f <= rows; f++) svg += `<path d="M45 ${top + f * rowHeight}H205" stroke="${f === 0 && base === 1 ? '#404a38' : '#cfd4c4'}" stroke-width="${f === 0 && base === 1 ? 5 : 1.3}"/>`;
-    for (let s = 0; s < 6; s++) svg += `<path d="M${x(s)} ${top}V${bottom}" stroke="#b6bfa9" stroke-width="${1.65 - s * 0.15}"/>`;
+    svg += `<text x="19" y="${top + 24}" font-size="11" fill="#745d56" text-anchor="middle">${base}</text>`;
+    for (let f = 0; f <= rows; f++) svg += `<path d="M45 ${top + f * rowHeight}H205" stroke="${f === 0 && base === 1 ? '#382824' : '#c6aea0'}" stroke-width="${f === 0 && base === 1 ? 5 : 1.3}"/>`;
+    for (let s = 0; s < 6; s++) svg += `<path d="M${x(s)} ${top}V${bottom}" stroke="#a88b7f" stroke-width="${1.65 - s * 0.15}"/>`;
     for (let f = base; f < base + rows; f++) if ([3,5,7,9,12,15].includes(f)) {
-      svg += `<circle cx="125" cy="${y(f)}" r="3" fill="#e5e8dd"/>`;
-      if (f === 12) svg += `<circle cx="157" cy="${y(f)}" r="3" fill="#e5e8dd"/>`;
+      svg += `<circle cx="125" cy="${y(f)}" r="3" fill="#eadbd0"/>`;
+      if (f === 12) svg += `<circle cx="157" cy="${y(f)}" r="3" fill="#eadbd0"/>`;
     }
     if (voicing.barre) {
       const bar = voicing.barre;
-      svg += `<path d="M${x(bar.start)} ${y(bar.fret)}H${x(bar.end)}" stroke="#647453" stroke-width="18" stroke-linecap="round"/>`;
+      svg += `<path d="M${x(bar.start)} ${y(bar.fret)}H${x(bar.end)}" stroke="#8a7461" stroke-width="18" stroke-linecap="round"/>`;
     }
     voicing.frets.forEach((f, s) => {
       const pc = f < 0 ? null : (music.TUNING[s] + f) % 12;
       const root = pc === parsed.rootPC;
-      if (f < 0) svg += `<path d="m${x(s)-4} 24 8 8m-8 0 8-8" stroke="#9aa38d" stroke-width="1.7" stroke-linecap="round"/>`;
-      else if (f === 0) svg += `<circle cx="${x(s)}" cy="28" r="5" fill="none" stroke="${root ? '#c8542d' : '#68755c'}" stroke-width="1.6"/>`;
+      if (f < 0) svg += `<path d="m${x(s)-4} 24 8 8m-8 0 8-8" stroke="#78615a" stroke-width="1.7" stroke-linecap="round"/>`;
+      else if (f === 0) svg += `<circle cx="${x(s)}" cy="28" r="5" fill="none" stroke="${root ? '#9b4935' : '#6f6751'}" stroke-width="1.6"/>`;
       else {
-        svg += `<circle cx="${x(s)}" cy="${y(f)}" r="11" fill="${root ? '#c8542d' : '#36432f'}"/>`;
-        svg += `<text x="${x(s)}" y="${y(f) + 4}" text-anchor="middle" font-size="12" font-weight="600" fill="#fffefa">${voicing.fingers[s]}</text>`;
+        svg += `<circle cx="${x(s)}" cy="${y(f)}" r="11" fill="${root ? '#9b4935' : '#382824'}"/>`;
+        svg += `<text x="${x(s)}" y="${y(f) + 4}" text-anchor="middle" font-size="12" font-weight="600" fill="#fff9f3">${voicing.fingers[s]}</text>`;
       }
-      svg += `<text x="${x(s)}" y="${bottom + 24}" text-anchor="middle" font-size="11" fill="${f < 0 ? '#b3b9a9' : root ? '#c8542d' : '#536247'}">${f < 0 ? '–' : escapeHTML(noteName(pc, parsed))}</text>`;
-      svg += `<text x="${x(s)}" y="${bottom + 43}" text-anchor="middle" font-size="9" fill="#a3aa96">${6-s}</text>`;
+      svg += `<text x="${x(s)}" y="${bottom + 24}" text-anchor="middle" font-size="11" fill="${f < 0 ? '#745d56' : root ? '#9b4935' : '#745d56'}">${f < 0 ? '–' : escapeHTML(noteName(pc, parsed))}</text>`;
+      svg += `<text x="${x(s)}" y="${bottom + 43}" text-anchor="middle" font-size="9" fill="#745d56">${6-s}</text>`;
     });
     return svg + '</svg>';
   }
 
-  function savedKey(name, frets) { return name + '|' + frets.join(','); }
+  function savedKey(name, frets) { return state.key({ chord: name, frets }); }
   function isSaved(v) { return saved.some(s => savedKey(s.chord, s.frets) === savedKey(chord.canonical, v.frets)); }
   function syncSaveButton() {
     const v = result?.voicings[activeIndex], button = $('#save-voicing');
@@ -279,16 +280,24 @@
   }
 
   async function changeSaved(transform) {
+    const refreshAfterFailure = () => {
+      syncSaveButton();
+      if (currentView === 'saved') renderSaved();
+    };
     const write = () => {
       readSaved();
-      if (!storageReadable) { toast(storageError); return false; }
+      if (!storageReadable) { refreshAfterFailure(); toast(storageError); return false; }
       try {
         const next = state.readStored(JSON.stringify(transform(saved)));
         localStorage.setItem(STORAGE, JSON.stringify(next)); saved = next;
         $('#saved-count').textContent = String(saved.length);
         syncSaveButton();
         return true;
-      } catch (error) { toast(error.name === 'QuotaExceededError' ? '저장 공간이 부족해요. 보관함을 내보낸 뒤 공간을 확인해 주세요.' : error.message || '보관함을 저장하지 못했어요.'); return false; }
+      } catch (error) {
+        refreshAfterFailure();
+        toast(error.name === 'QuotaExceededError' ? '저장 공간이 부족해요. 보관함을 내보낸 뒤 공간을 확인해 주세요.' : error.message || '보관함을 저장하지 못했어요.');
+        return false;
+      }
     };
     if (navigator.locks?.request) {
       try { return await navigator.locks.request(STORAGE, write); }
@@ -296,26 +305,41 @@
     }
     return write();
   }
+  function restoreSaved(entry) {
+    return changeSaved(list => list.some(item => state.key(item) === state.key(entry)) ? list : state.mergeRecords([entry], list));
+  }
   async function toggleSave() {
     const v = result.voicings[activeIndex];
     const entry = { chord: chord.canonical, frets: [...v.frets], options: {...currentOptions} };
-    const key = state.key(entry); let existing = false;
+    // Keep the action the user chose even if another tab changes this grip
+    // while the write is waiting for its lock.
+    const removing = isSaved(v), key = state.key(entry); let removed = null;
     if (await changeSaved(list => {
-      existing = list.some(s => state.key(s) === key);
-      return existing ? list.filter(s => state.key(s) !== key) : state.mergeRecords([entry], list);
+      const existing = list.find(s => state.key(s) === key) || null;
+      if (!removing) return existing ? list : state.mergeRecords([entry], list);
+      removed = existing;
+      return list.filter(s => state.key(s) !== key);
     })) {
-      renderResults(); $('#save-voicing')?.focus({ preventScroll: true });
-      toast(existing ? '보관함에서 운지를 지웠어요.' : '이 운지를 보관함에 저장했어요.', existing ? async () => {
-        if (await changeSaved(list => state.mergeRecords([entry], list))) { renderResults(); if (currentView === 'saved') renderSaved(); }
+      if (currentView === 'saved') renderSaved();
+      // changeSaved already updates the save button. Keep the existing result
+      // controls and keyboard focus when a queued write finishes later.
+      toast(removing ? removed ? '보관함에서 운지를 지웠어요.' : '이미 보관함에서 지워진 운지예요.' : '이 운지를 보관함에 저장했어요.', removed ? async () => {
+        if (await restoreSaved(removed) && currentView === 'saved') renderSaved();
       } : null);
     }
   }
   function renderSaved() {
+    const focusedTarget = currentView === 'saved' ? savedControlTargets.get(document.activeElement) : null;
+    const emptyBack = $('#empty-back');
+    const focusedEmpty = currentView === 'saved' && Boolean(emptyBack) && document.activeElement === emptyBack;
+    const focusIndex = focusedTarget ? Number(document.activeElement.getAttribute('data-' + focusedTarget.role)) : 0;
     readSaved();
+    const renderedSaved = saved;
     $('#export-saved').disabled = rawSaved === null || (storageReadable && saved.length === 0);
     if (!saved.length) {
       $('#saved-list').innerHTML = `<div class="empty-result"><div class="empty-icon">♧</div><h3>${storageReadable ? '마음에 드는 운지를 모아 보세요.' : '기존 보관함을 읽지 못했어요.'}</h3><p>${storageReadable ? '코드를 찾은 뒤 ‘운지 저장’을 누르면 여기에 모여요. 백업 파일이 있다면 ‘불러오기’로 복원할 수 있어요.' : '기존 데이터는 덮어쓰지 않았어요. 내보내기로 원본을 보관할 수 있어요.'}</p><button class="secondary-button" id="empty-back">코드 찾아보기 ${icon('arrow')}</button></div>`;
       $('#empty-back').addEventListener('click', () => showView('search'));
+      if (focusedTarget || focusedEmpty) $('#empty-back').focus({preventScroll:true});
       return;
     }
     $('#saved-list').innerHTML = `<div class="saved-grid">${saved.map((item, i) => {
@@ -325,17 +349,39 @@
       return `<article class="saved-item"><div class="saved-item-top"><h3>${escapeHTML(parsed?.name || item.chord)}</h3><button data-delete="${i}" aria-label="${escapeHTML(parsed?.name || item.chord)} 운지 삭제">${icon('close')}</button></div>${inspection.valid ? diagram(inspection.voicing, parsed) : `<p class="saved-invalid">${escapeHTML(inspection.reason)}<br>저장된 프렛: ${item.frets.map(f => f < 0 ? '×' : f).join(' · ')}</p>`}<button class="secondary-button" data-open-saved="${i}">${inspection.valid ? '이 운지 열기' : '저장된 운지 확인'} ${icon('arrow')}</button></article>`;
     }).join('')}</div><p class="saved-storage-note">기기 간에 자동으로 동기화되지 않아요. 브라우저 데이터를 지우면 보관함도 지워져요.</p>`;
     $('#saved-list').querySelectorAll('[data-delete]').forEach(button => button.addEventListener('click', async () => {
-      const index = Number(button.dataset.delete), entry = saved[index];
+      const index = Number(button.dataset.delete), entry = renderedSaved[index];
       if (!entry) return;
-      if (await changeSaved(list => list.filter(s => state.key(s) !== state.key(entry)))) {
-        renderSaved();
-        ($('#saved-list').querySelectorAll('[data-delete]')[Math.min(index, saved.length - 1)] || $('#empty-back'))?.focus({preventScroll:true});
-        toast('보관함에서 지웠어요.', async () => { if (await changeSaved(list => state.mergeRecords([entry], list))) renderSaved(); });
+      let removed = null;
+      if (await changeSaved(list => {
+        removed = list.find(s => state.key(s) === state.key(entry)) || null;
+        return list.filter(s => state.key(s) !== state.key(entry));
+      })) {
+        if (currentView === 'saved') renderSaved();
+        toast(removed ? '보관함에서 지웠어요.' : '이미 보관함에서 지워진 운지예요.', removed ? async () => { if (await restoreSaved(removed) && currentView === 'saved') renderSaved(); } : null);
       }
     }));
     $('#saved-list').querySelectorAll('[data-open-saved]').forEach(button => button.addEventListener('click', () => {
-      const item = saved[Number(button.dataset.openSaved)]; setOptions(item.options); showView('search', false); search(item.chord, item.frets);
+      const item = renderedSaved[Number(button.dataset.openSaved)];
+      if (!item) return;
+      setOptions(item.options); showView('search', false); search(item.chord, item.frets);
     }));
+    // Preserve the same record and action across refreshes. If it was removed,
+    // keep keyboard navigation near its last displayed position.
+    let focusRestored = false;
+    for (const role of ['delete', 'open-saved']) {
+      $('#saved-list').querySelectorAll(`[data-${role}]`).forEach(button => {
+        const target = { key: state.key(renderedSaved[Number(button.getAttribute('data-' + role))]), role };
+        savedControlTargets.set(button, target);
+        if (focusedTarget?.key === target.key && focusedTarget.role === role) {
+          button.focus({preventScroll:true}); focusRestored = true;
+        }
+      });
+    }
+    if (focusedTarget && !focusRestored) {
+      const buttons = $('#saved-list').querySelectorAll(`[data-${focusedTarget.role}]`);
+      buttons[Math.min(focusIndex, buttons.length - 1)]?.focus({preventScroll:true});
+    }
+    if (focusedEmpty) $('#back-search').focus({preventScroll:true});
   }
   function showView(view, writeHistory = true) {
     stopSound();
@@ -387,7 +433,7 @@
     const data = storageReadable ? state.backup(saved) : rawSaved;
     const url = URL.createObjectURL(new Blob([data], {type:'application/json'}));
     const link = document.createElement('a'); link.href = url;
-    link.download = `voicing-${storageReadable ? 'backup' : 'recovery'}-${new Date().toLocaleDateString('sv-SE')}.json`;
+    link.download = `chordot-${storageReadable ? 'backup' : 'recovery'}-${new Date().toLocaleDateString('sv-SE')}.json`;
     link.click(); setTimeout(() => URL.revokeObjectURL(url), 10000);
     toast(storageReadable ? '보관함 파일을 내려받아요. 다른 기기에서 불러올 수 있어요.' : '읽지 못한 원본 데이터를 복구용 파일로 내려받아요.');
   });
@@ -400,7 +446,8 @@
       const imported = state.readBackup(await file.text());
       let added = 0;
       if (await changeSaved(list => { const merged = state.mergeRecords(list, imported); added = merged.length - list.length; return merged; })) {
-        renderSaved(); toast(added ? `${added}개의 운지를 추가했어요. 기존 보관함도 그대로 있어요.` : '이미 보관 중인 운지예요.');
+        if (currentView === 'saved') renderSaved();
+        toast(added ? `${added}개의 운지를 추가했어요. 기존 보관함도 그대로 있어요.` : '이미 보관 중인 운지예요.');
       }
     } catch (error) { toast(error.message || '보관함 파일을 읽지 못했어요.'); }
   });
@@ -456,21 +503,45 @@
   function connectionState() { $('#offline-status').hidden = navigator.onLine; }
   connectionState(); window.addEventListener('online', connectionState); window.addEventListener('offline', connectionState);
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    let waiting = null, applyUpdate = false;
+    let waiting = null, applyUpdate = false, readyToReload = false, reloading = false;
+    let controller = navigator.serviceWorker.controller;
+    const reloadUpdated = () => {
+      if (reloading) return;
+      reloading = true; updateLocation('replace'); stopSound(); location.reload();
+    };
     const announce = registration => {
-      if (registration.waiting) { waiting = registration.waiting; $('#update-notice').hidden = false; }
+      // A first installation briefly has a waiting worker too. It will claim
+      // this page without an older bundle to replace, so no update is needed.
+      if (controller && registration.waiting) { waiting = registration.waiting; $('#update-notice').hidden = false; }
     };
     $('#apply-update').addEventListener('click', () => {
-      if (!waiting) return;
-      applyUpdate = true; updateLocation('replace'); stopSound(); waiting.postMessage({type:'SKIP_WAITING'});
+      if (reloading || (!waiting && !readyToReload)) return;
+      applyUpdate = true; updateLocation('replace'); stopSound();
+      if (readyToReload && (!waiting || waiting === controller || waiting.state === 'activated')) reloadUpdated();
+      else waiting.postMessage({type:'SKIP_WAITING'});
     });
-    navigator.serviceWorker.addEventListener('controllerchange', () => { if (applyUpdate) location.reload(); });
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      const wasControlled = Boolean(controller);
+      controller = navigator.serviceWorker.controller;
+      if (applyUpdate) reloadUpdated();
+      else if (wasControlled) {
+        // Another tab may already have activated the update. Keep this page
+        // intact until its user applies it, then reload without waiting again.
+        waiting = null; readyToReload = true; $('#update-notice').hidden = false;
+      }
+    });
     navigator.serviceWorker.register('sw.js', {updateViaCache:'none'}).then(registration => {
       announce(registration);
-      registration.addEventListener('updatefound', () => {
+      const observed = new WeakSet();
+      const watchInstalling = () => {
         const installing = registration.installing;
-        installing?.addEventListener('statechange', () => { if (installing.state === 'installed') announce(registration); });
-      });
+        if (!installing || observed.has(installing)) return;
+        observed.add(installing);
+        installing.addEventListener('statechange', () => { if (installing.state === 'installed') announce(registration); });
+      };
+      registration.addEventListener('updatefound', watchInstalling);
+      // register() can return while an update discovered earlier is installing.
+      watchInstalling();
       if (navigator.onLine) registration.update().catch(() => {});
     }).catch(() => { /* Core search and saving do not depend on offline installation. */ });
   }

@@ -1,5 +1,6 @@
 (function (scope) {
   'use strict';
+  const music = typeof module !== 'undefined' && module.exports ? require('./music.js') : scope.VoicingMusic;
   const LIMIT = 150;
   const defaults = { noBarre: false, complete: false, maxFret: 12, span: 3 };
   function cleanOptions(value = {}) {
@@ -12,7 +13,13 @@
     };
   }
   const validFrets = frets => Array.isArray(frets) && frets.length === 6 && frets.every(f => Number.isInteger(f) && f >= -1 && f <= 15) && frets.some(f => f >= 0);
-  const key = record => record.chord + '|' + record.frets.join(',');
+  function key(record) {
+    let symbol = record.chord;
+    // Backups and older records may use an alias. Compare its musical spelling
+    // without rewriting the original record or discarding unsupported old data.
+    try { symbol = music.parseChord(symbol).canonical; } catch {}
+    return symbol + '|' + record.frets.join(',');
+  }
   function normalizeRecords(value) {
     if (!Array.isArray(value) || value.length > LIMIT) throw new Error('보관함은 최대 150개의 운지를 담을 수 있어요.');
     const records = [], seen = new Set();
@@ -30,11 +37,11 @@
   function readStored(raw) { return normalizeRecords(JSON.parse(raw || '[]')); }
   function backup(records) { return JSON.stringify({ format: 'voicing-backup', version: 1, saved: normalizeRecords(records) }, null, 2); }
   function readBackup(raw) {
-    if (typeof raw !== 'string' || raw.length > 1024 * 1024) throw new Error('1MB 이하의 Voicing 보관함 파일을 선택해 주세요.');
+    if (typeof raw !== 'string' || raw.length > 1024 * 1024) throw new Error('1MB 이하의 코드닷 보관함 파일을 선택해 주세요.');
     let data;
-    try { data = JSON.parse(raw); } catch { throw new Error('JSON 형식의 Voicing 보관함 파일을 선택해 주세요.'); }
+    try { data = JSON.parse(raw); } catch { throw new Error('JSON 형식의 코드닷 보관함 파일을 선택해 주세요.'); }
     if (Array.isArray(data)) return normalizeRecords(data);
-    if (data?.format !== 'voicing-backup' || data?.version !== 1) throw new Error('지원하는 Voicing 보관함 파일이 아니에요.');
+    if (data?.format !== 'voicing-backup' || data?.version !== 1) throw new Error('지원하는 코드닷 보관함 파일이 아니에요.');
     return normalizeRecords(data.saved);
   }
   function mergeRecords(existing, incoming) {

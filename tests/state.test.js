@@ -17,6 +17,24 @@ test('backup import merges distinct shapes without dropping existing records', (
   assert.equal(next.length, 2);
   assert.deepEqual(next[0], base[0]);
 });
+test('saved aliases share one identity while retaining the original record and filters', () => {
+  const legacy = { chord: 'CM7', frets: [-1,3,2,0,0,0], options: { noBarre: true, maxFret: 5, span: 2 } };
+  const canonical = { ...legacy, chord: 'Cmaj7', options: { maxFret: 15 } };
+  assert.equal(state.key(legacy), state.key(canonical));
+  const stored = state.readStored(JSON.stringify([legacy, canonical]));
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0].chord, 'CM7', 'retain the original spelling for legacy recovery');
+  assert.deepEqual(stored[0].options, { noBarre: true, complete: false, maxFret: 5, span: 2 });
+  assert.equal(state.mergeRecords(stored, state.readBackup(JSON.stringify([canonical]))).length, 1);
+  assert.equal(state.readBackup(state.backup(stored))[0].chord, 'CM7');
+  assert.equal(state.mergeRecords(stored, [{ ...canonical, frets: [8,10,9,9,8,8] }]).length, 2, 'different grips remain distinct');
+});
+test('unrecognized legacy symbols remain distinct and recoverable when identifying saved grips', () => {
+  const unknown = { ...old, chord: 'Cunsupported' };
+  assert.equal(state.key(unknown), 'Cunsupported|2,-1,0,2,3,2');
+  assert.equal(state.readStored(JSON.stringify([unknown]))[0].chord, 'Cunsupported');
+  assert.notEqual(state.key({ ...old, chord: 'C(b5)' }), state.key({ ...old, chord: 'Cb5' }));
+});
 test('malformed storage throws so callers can preserve the original instead of overwriting it', () => {
   for (const text of ['{', '{}', '[null]', '[{"chord":"C","frets":[0,0]}]', '[{"chord":"C","frets":[-1,-1,-1,-1,-1,-1]}]']) assert.throws(() => state.readStored(text));
   assert.throws(() => state.readBackup('{"format":"voicing-backup","version":999,"saved":[]}'));
