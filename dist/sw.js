@@ -6,9 +6,9 @@ const ROOT = new URL(self.registration.scope);
 const CACHE_PREFIX = 'voicing-static-scope:' + encodeURIComponent(ROOT.pathname) + ':';
 // Generated from the exact deployed files by scripts/update-sw.js.
 // BEGIN BUNDLE INTEGRITY
-const BUNDLE_ID = '113eacb70acaa7f7f55f4ed257c0466159c233789c3abd7c6d4104c1e2c83574';
+const BUNDLE_ID = 'ea6f47ce097a69d004156f731eb9fc41b40347232716606835b93bcc5354a54c';
 const FILE_HASHES = {
-  "index.html": "827e2a102ecfcc50113bc73296395618223698ce784bb7ea7cd981edf935e3cf",
+  "index.html": "ffbb8f75b6346b512b95f03592fc0b35647dc3309e15b54e4791c156f5ec5dea",
   "style.css": "f34e1e1c2b38e184eaf2429ce111978153b7c709cf5f222c9c5edafbdfd06033",
   "music.js": "4a81348d60e4f73d3caa7952da7a50ce0f8e4774033b7f085299f6c6a7918d0b",
   "state.js": "fd72f4fe13f6d6cb683979c0b2823037d33e26c4be60967911ce3b430bcdeb6b",
@@ -105,7 +105,7 @@ async function validResponse(response, kind) {
   if (kind === 'html') {
     // An authentication gate may return 200 text/html. Never cache it as the app.
     const html = await response.clone().text();
-    return /<title>\s*Chordot\b/.test(html) && /id=["']search-form["']/.test(html) && /src=["'](?:\.\/)?music\.js["']/.test(html);
+    return /<title>\s*(?:코드닷\s*\(\s*)?Chordot\b/.test(html) && /id=["']search-form["']/.test(html) && /src=["'](?:\.\/)?music\.js["']/.test(html);
   }
   return true;
 }

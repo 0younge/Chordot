@@ -28,6 +28,12 @@ python3 -m http.server 4173 --directory dist
 
 이전 사이트의 보관함은 새 주소로 자동 이동하지 않습니다. 이전 주소에서 **내보내기**로 저장한 백업 파일을 새 주소의 **불러오기**에서 선택하세요.
 
+### 검색엔진 수집 정보
+
+공개 홈페이지의 제목·설명·대표 주소와 앱 정보를 검색엔진에 제공합니다. 대표 주소는 `https://0younge.github.io/Chordot/`, 사이트맵은 `https://0younge.github.io/Chordot/sitemap.xml`입니다. 선택 운지와 필터를 담은 주소는 같은 앱의 상태이므로 사이트맵에는 대표 주소만 포함합니다.
+
+Google Search Console은 위 주소의 URL 접두어 속성을 사용합니다. `index.html`의 `google-site-verification` 태그는 소유확인 유지를 위해 보존하세요. `robots.txt`는 호스트 루트에서만 유효하므로 `/Chordot/robots.txt`를 만들지 않습니다. 네이버 서치어드바이저는 호스트 단위로 등록합니다. 등록·수집 요청은 검색 결과 노출이나 특정 순위를 보장하지 않습니다.
+
 ### 다른 정적 호스팅
 
 Cloudflare Pages의 정적 파일 업로드에 `dist` 폴더의 내용을 올리면 됩니다. GitHub Pages를 사용하는 경우에도 같은 정적 파일을 배포하면 됩니다. 별도 빌드 명령이나 환경 변수는 필요하지 않습니다. 무료 기본 주소를 사용할 수 있으며, 호스팅 정책은 배포 시 공식 문서에서 확인하세요.

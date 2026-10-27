@@ -71,6 +71,23 @@ test('installation validates and caches a complete bundle without forcing a live
   assert.ok(app.calls.some(call => call.url.endsWith('/state.js')));
 });
 
+test('the Korean Chordot title installs and remains available offline', async () => {
+  assert.match(assetSource('index.html'), /<title>코드닷\(Chordot\)/);
+  const app = setup(); await app.dispatch('install');
+  app.setOffline(true);
+  const response = await app.dispatch('fetch', { request: { method: 'GET', mode: 'navigate', url: app.root } });
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), assetSource('index.html'));
+});
+
+test('HTML with the correct localized title and app markers still requires its exact file hash', async () => {
+  const app = setup((response, name) => name === 'index.html'
+    ? new Response(assetSource(name) + '\n<!-- another release -->', { headers: response.headers })
+    : response);
+  await assert.rejects(() => app.dispatch('install'), /파일의 버전이 달라졌습니다: index\.html/);
+  assert.equal(app.stores.size, 0, 'unverified HTML must never be installed for offline use');
+});
+
 test('a login response or MIME mismatch never becomes an offline app', async () => {
   for (const kind of ['login','redirect','404','wrong-mime']) {
     const app = setup((response, name) => {
