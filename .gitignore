@@ -3,3 +3,4 @@ node_modules/
 .preview/
 *.zip
 *.log
+.openai/
